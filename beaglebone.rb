@@ -69,6 +69,18 @@ module Beagle
       end
     end
 
+    def value
+      File.open(File.join(PATHS[:gpio], "gpio#{@pin.to_s}", "value")) do |gpio_value|
+        @value = gpio_value.read
+      end
+
+      if @value.to_i == 1
+        :high
+      elsif @value.to_i == 0
+        :low
+      end
+    end
+
     def needs_export?
       !Beagle::EXPORTS.keys.include?(@pin)
     end
