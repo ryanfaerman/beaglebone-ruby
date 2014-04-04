@@ -1,7 +1,10 @@
 module Beagle
   EXPORTS = {}
+
   PATHS = {
-    :gpio => 'tmp/sys/class/gpio',
+    :gpio => '/sys/class/gpio',
+    :capemgr => '/sys/devices/bone_capemgr.9',
+    :analog => '/sys/devices/ocp.3/helper.15',
     :omap_mux => '/sys/kernel/debug/omap_mux'
   }
 
@@ -87,7 +90,7 @@ module Beagle
 
     def export
       puts "exporting #{self.to_s}"
-      File.open(File.join(PATHS[:gpio], 'exports'), 'w') do |exports|
+      File.open(File.join(PATHS[:gpio], 'export'), 'w') do |exports|
         exports << @pin
       end
       Beagle::EXPORTS[@pin] = @options
@@ -101,4 +104,40 @@ module Beagle
     end
   end
 
+  class Analog
+    @@ENABLED = false
+
+    def initialize(pin)
+      @pin = parse(pin)
+      enable if need_enabling?
+    end
+
+    def parse(pin)
+      p = pin.to_i
+      raise ArgumentError.new("Bad analog pin #{p}") unless p.between?(0,7)
+      p
+    end
+
+    def need_enabling?
+      !@@ENABLED
+    end
+
+    def enable
+      puts "enabling analog pins"
+      File.open(File.join(PATHS[:capemgr], 'slots'), 'w') do |slots|
+        slots << "cape-bone-iio\n"
+      end
+      @@ENABLED = true
+    end
+
+    def value
+      val = -1
+      File.open(File.join(PATHS[:analog], "AIN#{@pin.to_s}"), 'r') do |analog_value|
+        val = analog_value.read
+      end
+      val = val.to_i
+      raise RangeError.new("Failed to read from pin #{@pin}") unless val.between?(0,4096)
+      val
+    end
+  end
 end
