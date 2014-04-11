@@ -180,6 +180,14 @@ module Beagle
       end
     end
 
+    def polarity=(v)
+      v = v.to_i
+      raise ArgumentError.new("Bad run value #{v}") unless v.between?(0,1)
+      File.open(File.join(Beagle::PWMEXPORTS[@pin], "polarity"), 'w') do |f|
+        f << "#{v}\n"
+      end
+    end
+
     def period=(v)
       v = v.to_i
       File.open(File.join(Beagle::PWMEXPORTS[@pin], "period"), 'w') do |f|
