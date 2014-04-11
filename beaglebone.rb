@@ -1,7 +1,12 @@
 module Beagle
-  EXPORTS = {}
+  GPIOEXPORTS = {}
+  PWMEXPORTS = {}
+
   PATHS = {
-    :gpio => 'tmp/sys/class/gpio',
+    :gpio => '/sys/class/gpio',
+    :capemgr => '/sys/devices/bone_capemgr.9',
+    :analog => '/sys/devices/ocp.3/helper.15',
+    :pwm =>'/sys/devices/ocp.3/',
     :omap_mux => '/sys/kernel/debug/omap_mux'
   }
 
@@ -82,15 +87,15 @@ module Beagle
     end
 
     def needs_export?
-      !Beagle::EXPORTS.keys.include?(@pin)
+      !Beagle::GPIOEXPORTS.keys.include?(@pin)
     end
 
     def export
-      puts "exporting #{self.to_s}"
-      File.open(File.join(PATHS[:gpio], 'exports'), 'w') do |exports|
+      puts "exporting GPIO pin #{self.to_s}"
+      File.open(File.join(PATHS[:gpio], 'export'), 'w') do |exports|
         exports << @pin
       end
-      Beagle::EXPORTS[@pin] = @options
+      Beagle::GPIOEXPORTS[@pin] = @options
     end
 
     def to_s
@@ -101,4 +106,105 @@ module Beagle
     end
   end
 
+  class Analog
+    @@ENABLED = false
+
+    def initialize(pin)
+      @pin = parse(pin)
+      enable if need_enabling?
+    end
+
+    def parse(pin)
+      p = pin.to_i
+      raise ArgumentError.new("Bad analog pin #{p}") unless p.between?(0,7)
+      p
+    end
+
+    def need_enabling?
+      !@@ENABLED
+    end
+
+    def enable
+      puts "enabling analog pins"
+      File.open(File.join(PATHS[:capemgr], 'slots'), 'w') do |slots|
+        slots << "cape-bone-iio\n"
+      end
+      @@ENABLED = true
+    end
+
+    def value
+      val = -1
+      File.open(File.join(PATHS[:analog], "AIN#{@pin.to_s}"), 'r') do |analog_value|
+        val = analog_value.read
+      end
+      val = val.to_i
+      raise RangeError.new("Failed to read from pin #{@pin}") unless val.between?(0,4096)
+      val
+    end
+  end
+
+
+  class PWM
+    attr_accessor :duty, :period, :run
+
+    def initialize(pin)
+      @pin = parse(pin)
+      export if needs_export?
+    end
+
+    def parse(pin)
+      p = pin.to_s
+      p
+    end
+
+    def needs_export?
+      !Beagle::PWMEXPORTS.keys.include?(@pin)
+    end
+
+    def export
+      puts "exporting PWM pin #{self.to_s}"
+      File.open(File.join(PATHS[:capemgr], 'slots'), 'w') do |slots|
+        slots << "am33xx_pwm\n"
+      end
+
+      File.open(File.join(PATHS[:capemgr], 'slots'), 'w') do |slots|
+        slots << "bone_pwm_P#{self.to_s}""\n"
+      end
+      Beagle::PWMEXPORTS[@pin] = Dir.glob(File.join(PATHS[:pwm], "pwm_test_P#{self.to_s}.*")).first
+    end
+
+    def duty=(v)
+      v = v.to_i
+      File.open(File.join(Beagle::PWMEXPORTS[@pin], "duty"), 'w') do |f|
+        f << "#{v}\n"
+      end
+    end
+
+    def polarity=(v)
+      v = v.to_i
+      raise ArgumentError.new("Bad run value #{v}") unless v.between?(0,1)
+      File.open(File.join(Beagle::PWMEXPORTS[@pin], "polarity"), 'w') do |f|
+        f << "#{v}\n"
+      end
+    end
+
+    def period=(v)
+      v = v.to_i
+      File.open(File.join(Beagle::PWMEXPORTS[@pin], "period"), 'w') do |f|
+        f << "#{v}\n"
+      end
+    end
+
+    def run=(v)
+      v = v.to_i
+      raise ArgumentError.new("Bad run value #{v}") unless v.between?(0,1)
+      File.open(File.join(Beagle::PWMEXPORTS[@pin], "run"), 'w') do |f|
+        f << "#{v}\n"
+      end
+    end
+
+    def to_s
+      @pin.to_s
+    end
+  end
 end
